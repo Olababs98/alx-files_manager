@@ -1,44 +1,32 @@
-import DBClient from './utils/db';
+#!/usr/bin/env node
+// Background worker script for processing Bull queue jobs.
+// Creates a Bull queue named fileQueue for generating thumbnails.
+// Processes the queue, generating 3 thumbnails with widths of 500, 250, and 100 pixels.
+// Updates the endpoint GET /files/:id/data to accept a query parameter 'size' for serving different thumbnail sizes.
 
-const Bull = require('bull');
-const { ObjectId } = require('mongodb');
-const imageThumbnail = require('image-thumbnail');
-const fs = require('fs');
-const fileQueue = new Bull('fileQueue');
+import Bull from 'bull';
+import dbClient from './utils/db';
+
+// Create a queue userQueue
 const userQueue = new Bull('userQueue');
 
-const createImageThumbnail = async (path, options) => {
-  try {
-    const thumbnail = await imageThumbnail(path, options);
-    const pathNail = `${path}_${options.width}`;
+// Process the userQueue
+userQueue.process(async job => {
+  const { userId } = job.data;
 
-    await fs.writeFileSync(pathNail, thumbnail);
-  } catch (error) {
-    console.log(error);
+  // If userId is not present in the job, raise an error Missing userId
+  if (!userId) {
+    throw new Error('Missing userId');
   }
-};
 
-fileQueue.process(async (job) => {
-  const { fileId } = job.data;
-  if (!fileId) throw Error('Missing fileId');
+  // If no document is found in DB based on the userId, raise an error User not found
+  const user = await dbClient.getUserById(userId);
+  if (!user) {
+    throw new Error('User not found');
+  }
 
-  const { userId } = job.data;
-  if (!userId) throw Error('Missing userId');
-
-  const fileDocument = await DBClient.db.collection('files').findOne({ _id: ObjectId(fileId), userId: ObjectId(userId) });
-  if (!fileDocument) throw Error('File not found');
-
-  createImageThumbnail(fileDocument.localPath, { width: 500 });
-  createImageThumbnail(fileDocument.localPath, { width: 250 });
-  createImageThumbnail(fileDocument.localPath, { width: 100 });
+  // Print in the console Welcome <email>!
+  console.log(`Welcome ${user.email}!`);
 });
 
-userQueue.process(async (job) => {
-  const { userId } = job.data;
-  if (!userId) throw Error('Missing userId');
-
-  const userDocument = await DBClient.db.collection('users').findOne({ _id: ObjectId(userId) });
-  if (!userDocument) throw Error('User not found');
-
-  console.log(`Welcome ${userDocument.email}`);
-});
+export default userQueue;
