@@ -1,65 +1,66 @@
-#!/usr/bin/env node
+import mongodb from 'mongodb';
+// eslint-disable-next-line no-unused-vars
+import Collection from 'mongodb/lib/collection';
+import envLoader from './env_loader';
+
 /**
- * MongoDB Utilities - Database Client
- *
- * This script defines a MongoDB Database Client class (DBClient) that connects to
- * MongoDB using the provided or default configuration. It includes methods to check
- * the connection status, retrieve the number of documents in the 'users' and 'files'
- * collections, and exports an instance of the DBClient named dbClient.
- *
- * Environment Variables:
- * - DB_HOST: MongoDB host address (default: 'localhost')
- * - DB_PORT: MongoDB port (default: 27017)
- * - DB_DATABASE: MongoDB database name (default: 'files_manager')
+ * Represents a MongoDB client.
  */
-
-import { MongoClient } from 'mongodb';
-
 class DBClient {
-  // Constructor sets up the MongoDB client and connects to the database
+  /**
+   * Creates a new DBClient instance.
+   */
   constructor() {
-    // Extracting configuration from environment variables or using defaults
+    envLoader();
     const host = process.env.DB_HOST || 'localhost';
     const port = process.env.DB_PORT || 27017;
     const database = process.env.DB_DATABASE || 'files_manager';
+    const dbURL = `mongodb://${host}:${port}/${database}`;
 
-    // MongoDB connection URL
-    const url
-
-import { MongoClient } from 'mongodb';
-
-class DBClient {
-  constructor() {
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || 27017;
-    const database = process.env.DB_DATABASE || 'files_manager';
-
-    const url = `mongodb://${host}:${port}/${database}`;
-
-    this.client = new MongoClient(url, { useNewUrlParser: true, useUnifiedTopology: true });
-
-    this.connection = this.client.connect().then(() => {
-      console.log('DB connected successfully');
-    }).catch((err) => {
-      console.error(`DB connection error: ${err}`);
-    });
+    this.client = new mongodb.MongoClient(dbURL, { useUnifiedTopology: true });
+    this.client.connect();
   }
 
-  async isAlive() {
+  /**
+   * Checks if this client's connection to the MongoDB server is active.
+   * @returns {boolean}
+   */
+  isAlive() {
     return this.client.isConnected();
   }
 
+  /**
+   * Retrieves the number of users in the database.
+   * @returns {Promise<Number>}
+   */
   async nbUsers() {
-    const usersCollection = this.client.db().collection('users');
-    return usersCollection.countDocuments();
+    return this.client.db().collection('users').countDocuments();
   }
 
+  /**
+   * Retrieves the number of files in the database.
+   * @returns {Promise<Number>}
+   */
   async nbFiles() {
-    const filesCollection = this.client.db().collection('files');
-    return filesCollection.countDocuments();
+    return this.client.db().collection('files').countDocuments();
+  }
+
+  /**
+   * Retrieves a reference to the `users` collection.
+   * @returns {Promise<Collection>}
+   */
+  async usersCollection() {
+    return this.client.db().collection('users');
+  }
+
+  /**
+   * Retrieves a reference to the `files` collection.
+   * @returns {Promise<Collection>}
+   */
+  async filesCollection() {
+    return this.client.db().collection('files');
   }
 }
 
-const dbClient = new DBClient();
-
+export const dbClient = new DBClient();
 export default dbClient;
