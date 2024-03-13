@@ -1,54 +1,40 @@
-#!/usr/bin/env node
-/**
- * @file controllers/UsersController.js
- * @description Controller handling user-related endpoints.
- * Contains methods for retrieving user details (GET /users/me) based on authentication token.
- */
-
-// controllers/UsersController.js
-
+/* eslint-disable import/no-named-as-default */
+import sha1 from 'sha1';
+import Queue from 'bull/lib/queue';
 import dbClient from '../utils/db';
-import { v4 as uuidv4 } from 'uuid';
-import bcrypt from 'bcrypt';
-import userQueue from '../worker';
 
-class UsersController {
+const userQueue = new Queue('email sending');
+
+export default class UsersController {
   static async postNew(req, res) {
-    const { email, password } = req.body;
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
 
-    // Validate inputs
     if (!email) {
-      return res.status(400).json({ error: 'Missing email' });
+      res.status(400).json({ error: 'Missing email' });
+      return;
     }
-
     if (!password) {
-      return res.status(400).json({ error: 'Missing password' });
+      res.status(400).json({ error: 'Missing password' });
+      return;
     }
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    // Check if the email already exists
-    const userExists = await dbClient.getUser(email);
-    if (userExists) {
-      return res.status(400).json({ error: 'Already exist' });
+    if (user) {
+      res.status(400).json({ error: 'Already exist' });
+      return;
     }
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    userQueue.add({ userId });
+    res.status(201).json({ email, id: userId });
+  }
 
-    // Create user document
-    const newUser = {
-      email,
-      password: hashedPassword,
-    };
+  static async getMe(req, res) {
+    const { user } = req;
 
-    // Add the new user document in the DB
-    const result = await dbClient.insertUser(newUser);
-
-    // Add a job to the userQueue with the userId
-    await userQueue.add({ userId: result.ops[0]._id });
-
-    // Return the new user document
-    return res.status(201).json(result.ops[0]);
+    res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }
-
-export default UsersController;
